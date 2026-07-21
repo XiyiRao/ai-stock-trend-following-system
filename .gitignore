@@ -7,6 +7,6 @@ venv/
 work/
 data/raw/
 outputs/*.csv
-outputs/*.json
-outputs/*.png
 !outputs/.gitkeep
+build/
+*.egg-info/

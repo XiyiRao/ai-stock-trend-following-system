@@ -40,6 +40,8 @@ python run.py
 - `outputs/backtest.csv`：中际旭创的简易历史回测；
 - `outputs/market_dashboard.png`：价格、AI_SCORE 和仓位图。
 
+仓库会保留最新的 `latest_signal.json` 和 `market_dashboard.png` 供 GitHub 直接查看；体积较大的历史 CSV 与原始行情只保存在本地。数据层优先调用 `yfinance`，批量接口限流时自动切换到 Yahoo 图表接口；已有缓存时只回补最近90天。
+
 回测将收盘后得到的信号延后一个交易日执行，并默认收取单边10个基点的仓位变动成本。它是研究基线，并未包含涨跌停、滑点、税费、停牌和实际成交限制。
 
 ## 测试
