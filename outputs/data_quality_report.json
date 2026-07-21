@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "generated_at": "2026-07-21T17:35:24",
+  "generated_at": "2026-07-21T18:00:50",
   "china": {
     "passed": true,
     "rows": 2073,
@@ -22,7 +22,7 @@
   "aligned_rows": 2073,
   "strict_alignment_audit_passed": true,
   "standardized_china_sha256": "1d4cf75e7b735d57e52fef7f7040e6e36836c65fffb50d03a4454036cbf3943d",
-  "us_adjusted_close_sha256": "117476b1f43f135f6ebf99fb37707eefd8b0cd06729c7a8ccc9e6b4fd54bce6e",
+  "us_adjusted_close_sha256": "4a695313fe13d269e90cdbbe49b77ef7296307a13e47bad9a2f5ca219e66326d",
   "warnings": [],
   "issues": []
 }

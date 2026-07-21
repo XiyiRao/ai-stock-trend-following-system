@@ -13,3 +13,9 @@ build/
 *.egg-info/
 data/input/*.xlsx
 data/input/*.xls
+logs/
+STOP_TRADING
+outputs/paper_account.json
+outputs/paper_daily_summary.json
+outputs/next_order_plan.json
+outputs/environment_report.json

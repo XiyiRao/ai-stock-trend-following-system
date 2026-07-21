@@ -1,48 +1,44 @@
 # AI Stock Trend Following System
 
-这是一个每日收盘后运行的市场状态识别系统。当前阶段按照《中际旭创_量化自动交易系统_完整实施操作指南》实现了数据质量闸门、严格的中美交易日对齐，以及四因子 AI 市场状态评分。
+这是一个面向中际旭创（300308）的日频、纯多头趋势研究系统，按照《中际旭创_量化自动交易系统_完整实施操作指南》第4—12章实现数据质量、跨市场对齐、AI产业评分、个股评分、仓位风控、A股事件回测、稳健性研究和模拟盘日常流程。
 
-> 本项目仅用于研究和教学，不构成投资建议。真实交易前必须接入可靠行情，并独立验证复权、时区、停牌、滑点、税费和涨跌停规则。
+> 本项目仅用于研究和教学，不构成投资建议。回测通过不代表未来盈利。完成至少20个真实交易日的模拟盘验收前，不应连接真实资金账户。
 
-## 已完成范围
+## 当前进度
 
-- 美股 AI 篮子：NVDA、AVGO、AMD、ANET、SMCI
-- 市场指标：SOX、QQQ、美国 10 年期国债收益率
-- A 股标的：中际旭创（300308），前复权日线 OHLCV/成交额
-- 中国交易日历与数据质量检查
-- 严格跨市场对齐：A 股日期 t 只能使用满足 US_Date < CN_Date(t) 的最近美股数据
-- 10 个历史日期的确定性时间对齐审计
-- 下一交易日执行的研究型基准回测
+| 章节 | 软件实现 | 仍需人工/时间完成 |
+|---|---|---|
+| 4. 环境、软件与账户 | 独立`.venv`、环境检查、安装脚本 | 创业板权限和券商模拟账户需本人向券商确认 |
+| 5. 数据与质量控制 | Choice、Yahoo/缓存、OHLCV、交易日历、哈希和质量闸门 | 每次导出需确认Choice为前复权 |
+| 6. 时差与未来函数 | 严格`US_Date < CN_Date`、滚动百分位、10日审计 | 节假日错位继续在模拟盘观察 |
+| 7. AI产业状态 | AI股票、SOX、QQQ、美债四因子`AI_SCORE` | 参数上线前冻结 |
+| 8. 个股因子 | 五维`STOCK_SCORE` | 参数上线前冻结 |
+| 9. 信号、仓位与风控 | 仓位上限、回撤、MA120、ATR追踪止损、再平衡阈值 | 真实持仓以券商为准 |
+| 10. A股回测 | T+1开盘、整手、涨跌停、停牌、滑点、佣金、印花税、限额 | 分钟成交模型属于后续升级 |
+| 11. 回测评价与稳健性 | 基准比较、样本划分、走步、成本压力、参数扰动和验收闸门 | 结果仍需人工解释，不能只看收益率 |
+| 12. 模拟盘与SOP | 持久化模拟账户、计划单、幂等、锁、日志、对账、停机开关 | 必须真实累计至少20个交易日；当前从1/20开始 |
 
-## AI_SCORE
+更详细状态见 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md)，每日操作见 [`docs/DAILY_SOP.md`](docs/DAILY_SOP.md)。
+
+## 策略结构
+
+### 第一层：AI_SCORE
 
 | 分项 | 权重 | 计算逻辑 |
 |---|---:|---|
-| AI 龙头动量 | 40% | 20 日、60 日平均收益率的 3 年滚动百分位，60%/40% 合成 |
-| SOX 趋势 | 25% | 20 日动量百分位、价格高于 MA60、MA60 高于 MA120 |
-| QQQ 趋势 | 20% | 20 日动量百分位、价格高于 MA60、MA60 高于 MA120 |
-| 利率环境 | 15% | 10Y 收益率 20 日变化的反向滚动百分位 |
+| AI 龙头动量 | 40% | NVDA、AVGO、AMD、ANET、SMCI的20/60日动量滚动百分位 |
+| SOX趋势 | 25% | 动量、MA60和MA120 |
+| QQQ趋势 | 20% | 大型成长股风险偏好 |
+| 利率环境 | 15% | 美国10年期收益率20日变化的反向百分位 |
 
-滚动百分位窗口为 756 个交易日，至少需要 252 个有效观察值，只使用当时及以前的历史数据。
-
-| AI_SCORE | 市场状态 | 市场仓位上限 | 中际旭创最终上限 |
+| AI_SCORE | 市场状态 | 市场上限 | 单票最终上限 |
 |---:|---|---:|---:|
-| >= 75 | 强风险偏好 | 100% | 80% |
-| 60–74.9 | 正常 | 70% | 70% |
-| 45–59.9 | 谨慎 | 30% | 30% |
-| < 45 | 防御 | 0% | 0% |
+| >=75 | 强风险偏好 | 100% | 80% |
+| 60—74.9 | 正常 | 70% | 70% |
+| 45—59.9 | 谨慎 | 30% | 30% |
+| <45 | 防御 | 0% | 0% |
 
-## Choice Excel 数据
-
-如果无法使用 Choice API，可将中际旭创日线导出为 Excel，并保存为：
-
-    data/input/choice_300308.xlsx
-
-导出字段需要包含：证券代码、交易时间、开盘价、最高价、最低价、收盘价、成交量、成交额。系统会自动忽略空行和 Choice 页脚，验证证券代码与 OHLCV，并优先使用该文件；文件不存在时才回退到 AKShare/本地缓存。原始 Excel 默认被 Git 忽略，不会上传 GitHub。
-
-## 中际旭创个股评分（第二层）
-
-系统已经实现文档中的五维 `STOCK_SCORE`：
+### 第二层：STOCK_SCORE
 
 | 分项 | 最高分 | 主要依据 |
 |---|---:|---|
@@ -52,37 +48,79 @@
 | 突破 | 15 | 收盘价相对120日最高价的位置 |
 | 风险质量 | 15 | ATR波动百分位与60日回撤 |
 
-只有 `STOCK_SCORE >= 55`、收盘价高于 MA60 且 MA20 高于 MA60 时，个股趋势才通过。最终仓位不会超过第一层的市场仓位上限，并继续受到以下规则约束：60日回撤达到15%时仓位减半，达到22%或跌破MA120时清仓。ATR追踪止损参考价同时输出，但需要在严谨回测和模拟持仓阶段结合实际入场后的最高价执行。
-## 安装与运行
+只有`STOCK_SCORE >= 55`、收盘价高于MA60且MA20高于MA60时，才允许使用第一层给出的市场仓位。60日回撤达到15%减半，达到22%或跌破MA120清仓；持仓后还执行3倍ATR追踪止损。
 
-需要 Python 3.10 或更高版本。
+## 数据准备
+
+Choice日线Excel放在：
+
+```text
+data/input/choice_300308.xlsx
+```
+
+字段应包含证券代码、交易时间、开盘价、最高价、最低价、收盘价、成交量和成交额。原始Excel和标准化行情默认不上传GitHub。
+
+## 第一次安装
+
+Windows PowerShell：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup_windows.ps1
+```
+
+也可以手动执行：
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -r requirements.txt
 $env:PYTHONPATH="src"
-python run.py
+.venv\Scripts\python.exe check_environment.py
+.venv\Scripts\python.exe -m pytest -q
 ```
+
+## 运行方式
+
+完整研究回测与稳健性分析：
+
+```powershell
+$env:PYTHONPATH="src"
+.venv\Scripts\python.exe run_backtest.py
+```
+
+每日收盘后信号与模拟盘：
+
+```powershell
+$env:PYTHONPATH="src"
+.venv\Scripts\python.exe run_daily.py
+```
+
+紧急停止模拟执行：在项目根目录创建空文件`STOP_TRADING`，或设置环境变量`KILL_SWITCH=true`。停机时仍可读取数据和报告，但不执行模拟订单。
 
 ## 主要输出
 
-- `outputs/latest_signal.json`：最新市场状态和目标仓位
-- `outputs/data_quality_report.json`：字段、日期、有效成分、文件哈希与质量闸门
-- `outputs/time_alignment_audit.csv`：10 个日期的未来函数审计
-- `outputs/us_market_scores.csv`：美股原始评分时间序列
-- `outputs/stock_scores.csv`：中际旭创五维个股评分序列
-- `outputs/market_state.csv`：市场状态、个股确认与最终仓位序列
-- `outputs/backtest.csv`：下一交易日执行的研究型基准回测
-- `outputs/market_dashboard.png`：价格、AI_SCORE 与仓位上限图
+- `outputs/latest_signal.json` / `latest_signal.txt`：最新评分、风控和最终仓位
+- `outputs/data_quality_report.json`：数据质量闸门
+- `outputs/time_alignment_audit.csv`：未来函数日期审计
+- `outputs/equity_curve.csv` / `trade_log.csv` / `metrics.csv`：严谨回测明细
+- `outputs/equity_curve.png` / `drawdown.png`：净值和回撤图
+- `outputs/backtest_metrics.json`：回测指标
+- `outputs/benchmark_metrics.csv`：完整策略与三类基准比较
+- `outputs/sample_split_metrics.csv`：训练、验证、样本外指标
+- `outputs/cost_stress.csv`：1倍、1.5倍、2倍成本压力
+- `outputs/parameter_stability.csv`：参数扰动结果
+- `outputs/walk_forward.csv`：滚动走步结果
+- `outputs/research_summary.json`：机械验收闸门
+- `outputs/paper_daily_summary.json`：模拟盘当日摘要
+- `outputs/next_order_plan.json`：下一交易日计划单
+- `outputs/daily_reconciliation.csv`：每日目标与模拟持仓对账
 
-大体量行情 CSV 默认只保存在本地，不提交 GitHub。仓库保留最新信号、质量报告和仪表盘，方便直接查看。
+大体量CSV、模拟账户状态和日志只保留在本机，不提交GitHub。
 
 ## 测试
 
 ```powershell
 $env:PYTHONPATH="src"
-python -m pytest -q
+.venv\Scripts\python.exe -m pytest -q
 ```
 
-目前已经完成 AI 市场状态与个股 `STOCK_SCORE` 的组合信号，但回测仍只是验证信号时序和仓位映射的基准，不等同于可实盘使用的完整回测。下一阶段应实现严格撮合、停牌与涨跌停处理、滑点税费模型，以及样本外验证。
+目前共19项测试，覆盖评分边界、未来函数、Choice字段、下一日执行、一字涨停、ATR止损、费用、研究划分和模拟盘幂等性。

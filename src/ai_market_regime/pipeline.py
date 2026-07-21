@@ -16,7 +16,10 @@ from .china_data import (
 from .choice_data import load_choice_excel
 from .config import SystemConfig
 from .data import download_close_prices
-from .scoring import build_backtest, build_market_scores
+from .backtest import run_event_backtest
+from .reporting import latest_signal_text, save_backtest_outputs
+from .research import run_research_suite
+from .scoring import build_market_scores
 from .stock_scoring import build_stock_scores, combine_market_and_stock_scores
 
 
@@ -132,10 +135,8 @@ def _quality_report(
     )
     issues: list[str] = []
     report_warnings: list[str] = []
-    if session_lag > 1:
+    if session_lag > 0:
         issues.append(f"China bars trail the calendar by {session_lag} open sessions")
-    elif session_lag == 1:
-        report_warnings.append("China bars trail the calendar by one open session; provider may not have published final bars")
     if not strict_alignment:
         issues.append("US/CN strict-date audit failed")
     if valid_ai_members_latest < 3:
@@ -163,7 +164,11 @@ def _quality_report(
     return report
 
 
-def run_pipeline(root: Path, config: SystemConfig | None = None) -> dict[str, object]:
+def run_pipeline(
+    root: Path,
+    config: SystemConfig | None = None,
+    include_research: bool = True,
+) -> dict[str, object]:
     config = config or SystemConfig()
     output_dir = root / "outputs"
     raw_dir = root / "data" / "raw"
@@ -204,19 +209,31 @@ def run_pipeline(root: Path, config: SystemConfig | None = None) -> dict[str, ob
         us_path,
         config,
     )
-    backtest = build_backtest(combined, china_bars["close"], config.transaction_cost_bps)
+    equity_curve, trade_log = run_event_backtest(combined, config)
+    backtest_metrics = save_backtest_outputs(equity_curve, trade_log, output_dir)
+    research_summary: dict[str, object] | None = None
+    if include_research:
+        research = run_research_suite(combined, config, output_dir)
+        research_summary = research["summary"]
 
     us_scores.to_csv(output_dir / "us_market_scores.csv", index_label="US_Date", encoding="utf-8-sig")
     stock_scores.to_csv(output_dir / "stock_scores.csv", index_label="Date", encoding="utf-8-sig")
     combined.to_csv(output_dir / "market_state.csv", index_label="Date", encoding="utf-8-sig")
     audit.to_csv(output_dir / "time_alignment_audit.csv", index=False, encoding="utf-8-sig")
-    backtest.to_csv(output_dir / "backtest.csv", index_label="Date", encoding="utf-8-sig")
+    equity_curve.to_csv(output_dir / "backtest.csv", index_label="Date", encoding="utf-8-sig")
     (output_dir / "data_quality_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     payload = _latest_payload(combined)
+    payload["backtest_metrics"] = {
+        key: round(float(value), 6) if isinstance(value, (int, float)) else value
+        for key, value in backtest_metrics.items()
+    }
+    if research_summary is not None:
+        payload["research_mechanical_gates_passed"] = bool(research_summary["all_gates_passed"])
     (output_dir / "latest_signal.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    _plot_dashboard(combined, backtest, output_dir / "market_dashboard.png")
+    (output_dir / "latest_signal.txt").write_text(latest_signal_text(payload), encoding="utf-8")
+    _plot_dashboard(combined, equity_curve, output_dir / "market_dashboard.png")
     return payload

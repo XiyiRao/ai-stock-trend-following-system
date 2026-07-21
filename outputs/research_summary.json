@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-07-21T18:01:08",
+  "research_only": true,
+  "gate_results": {
+    "out_of_sample_annual_return_positive": true,
+    "out_of_sample_max_drawdown_within_30pct": true,
+    "out_of_sample_sharpe_near_one": true,
+    "out_of_sample_calmar_above_0_8": true,
+    "double_cost_total_return_positive": true,
+    "parameter_neighborhood_majority_positive": true,
+    "walk_forward_majority_positive": true,
+    "drawdown_lower_than_buy_and_hold": true
+  },
+  "all_gates_passed": true,
+  "positive_parameter_share": 1.0,
+  "positive_walk_forward_share": 0.7272727272727273,
+  "note": "Passing these mechanical gates is necessary but not sufficient for live trading."
+}

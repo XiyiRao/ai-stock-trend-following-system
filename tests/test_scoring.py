@@ -3,6 +3,9 @@ import pandas as pd
 import pytest
 
 from ai_market_regime import data as data_module
+from ai_market_regime.backtest import performance_metrics, run_event_backtest, trade_fees
+from ai_market_regime.paper import run_paper_daily
+from ai_market_regime.research import chronological_splits, positions_for_config
 from ai_market_regime.alignment import align_us_scores_to_china_dates, build_alignment_audit
 from ai_market_regime.china_data import DataQualityError, standardize_china_ohlcv, validate_china_ohlcv
 from ai_market_regime.choice_data import standardize_choice_frame
@@ -199,3 +202,148 @@ def test_failed_stock_trend_forces_zero_position_even_in_strong_market():
     result = combine_market_and_stock_scores(market, stock, config)
     assert result["Final_Target_Position"].eq(0.0).all()
     assert result["Position_Conclusion"].eq("空仓/观望").all()
+
+
+def _backtest_config(**overrides):
+    values = {
+        "initial_cash": 100_000.0,
+        "commission_rate": 0.0,
+        "minimum_commission": 0.0,
+        "sell_stamp_duty_rate": 0.0,
+        "slippage_bps": 0.0,
+        "max_order_value_cny": 1_000_000.0,
+        "max_daily_turnover_ratio": 1.0,
+    }
+    values.update(overrides)
+    return SystemConfig(**values)
+
+
+def test_event_backtest_executes_previous_signal_at_next_open():
+    index = pd.bdate_range("2024-01-02", periods=4)
+    frame = pd.DataFrame(
+        {
+            "open": [100.0, 101.0, 102.0, 103.0],
+            "high": [102.0, 103.0, 104.0, 105.0],
+            "low": [98.0, 99.0, 100.0, 101.0],
+            "close": [100.0, 102.0, 103.0, 104.0],
+            "volume": [1_000_000] * 4,
+            "Final_Target_Position": [0.8, 0.8, 0.0, 0.0],
+            "ATR20": [5.0] * 4,
+        },
+        index=index,
+    )
+    curve, trades = run_event_backtest(frame, _backtest_config())
+    assert trades.iloc[0]["side"] == "BUY"
+    assert pd.Timestamp(trades.iloc[0]["signal_date"]) == index[0]
+    assert pd.Timestamp(trades.iloc[0]["execution_date"]) == index[1]
+    assert curve.loc[index[0], "shares"] == 0
+
+
+def test_event_backtest_blocks_one_price_limit_up():
+    index = pd.bdate_range("2019-01-02", periods=2)
+    frame = pd.DataFrame(
+        {
+            "open": [100.0, 110.0],
+            "high": [102.0, 110.0],
+            "low": [98.0, 110.0],
+            "close": [100.0, 110.0],
+            "volume": [1_000_000, 1_000_000],
+            "Final_Target_Position": [0.8, 0.8],
+            "ATR20": [5.0, 5.0],
+        },
+        index=index,
+    )
+    curve, trades = run_event_backtest(frame, _backtest_config())
+    assert trades.empty
+    assert "一字涨停" in curve.loc[index[1], "blocked_reason"]
+
+
+def test_event_backtest_atr_stop_uses_prior_information():
+    index = pd.bdate_range("2024-01-02", periods=4)
+    frame = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 80.0, 82.0],
+            "high": [102.0, 122.0, 85.0, 84.0],
+            "low": [98.0, 99.0, 75.0, 80.0],
+            "close": [100.0, 120.0, 82.0, 83.0],
+            "volume": [1_000_000] * 4,
+            "Final_Target_Position": [0.8, 0.8, 0.8, 0.8],
+            "ATR20": [10.0, 10.0, 10.0, 10.0],
+        },
+        index=index,
+    )
+    curve, trades = run_event_backtest(frame, _backtest_config(atr_stop_multiple=3.0))
+    assert trades["side"].tolist()[:2] == ["BUY", "SELL"]
+    assert trades.iloc[1]["reason"] == "atr_stop"
+    assert bool(curve.loc[index[2], "atr_stop_triggered"])
+
+
+def test_fee_model_applies_minimum_commission_and_sell_stamp_duty():
+    config = SystemConfig(commission_rate=0.00015, minimum_commission=5.0, sell_stamp_duty_rate=0.0005)
+    assert trade_fees(1_000.0, False, config) == 5.0
+    assert trade_fees(10_000.0, True, config, pd.Timestamp("2024-01-02")) == 10.0
+    assert trade_fees(10_000.0, True, config, pd.Timestamp("2023-01-02")) == 15.0
+
+
+def test_research_splits_are_ordered_and_positions_respect_cap():
+    index = pd.bdate_range("2020-01-02", periods=100)
+    splits = chronological_splits(index)
+    assert splits["train"].max() < splits["validation"].min()
+    assert splits["validation"].max() < splits["out_of_sample"].min()
+    frame = pd.DataFrame(
+        {
+            "STOCK_SCORE": 80.0,
+            "close": 120.0,
+            "MA20": 110.0,
+            "MA60": 100.0,
+            "MA120": 90.0,
+            "Drawdown60": -0.05,
+            "Market_Position_Cap": 0.8,
+        },
+        index=index,
+    )
+    result = positions_for_config(frame, SystemConfig(max_target_position=0.5))
+    assert result["Final_Target_Position"].max() == 0.5
+
+
+def test_paper_daily_is_idempotent_and_executes_prior_plan(tmp_path):
+    config = _backtest_config(max_target_position=0.8)
+    payload = {
+        "china_signal_date": "2026-07-20",
+        "target_position": 0.3,
+    }
+    first_bar = pd.Series({"open": 100.0, "high": 105.0, "low": 98.0, "close": 102.0, "volume": 1_000_000})
+    first = run_paper_daily(tmp_path, payload, first_bar, 99.0, config, "abc123")
+    assert first["account"]["shares"] == 0
+    assert first["reconciliation"]["simulation_days"] == 1
+
+    payload["china_signal_date"] = "2026-07-21"
+    second_bar = pd.Series({"open": 103.0, "high": 106.0, "low": 101.0, "close": 105.0, "volume": 1_000_000})
+    second = run_paper_daily(tmp_path, payload, second_bar, 102.0, config, "abc123")
+    assert second["execution"]["status"] == "filled"
+    assert second["execution"]["side"] == "BUY"
+    assert second["account"]["shares"] > 0
+    assert second["reconciliation"]["simulation_days"] == 2
+
+    repeat = run_paper_daily(tmp_path, payload, second_bar, 102.0, config, "abc123")
+    assert repeat["reconciliation"]["simulation_days"] == 2
+    reconciliations = pd.read_csv(tmp_path / "outputs" / "daily_reconciliation.csv")
+    assert len(reconciliations) == 2
+
+def test_paper_kill_switch_disables_new_plan(tmp_path):
+    (tmp_path / "STOP_TRADING").write_text("", encoding="utf-8")
+    payload = {"china_signal_date": "2026-07-21", "target_position": 0.8}
+    bar = pd.Series(
+        {"open": 100.0, "high": 105.0, "low": 98.0, "close": 102.0, "volume": 1_000_000}
+    )
+    summary = run_paper_daily(
+        tmp_path,
+        payload,
+        bar,
+        99.0,
+        _backtest_config(),
+        "abc123",
+    )
+    assert summary["next_order_plan"]["status"] == "disabled"
+    assert summary["reconciliation"]["kill_switch"] is True
+    assert summary["account"]["shares"] == 0

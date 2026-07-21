@@ -26,5 +26,20 @@
   "raw_target_position": 0.0,
   "risk_rule": "60日回撤减仓",
   "target_position": 0.0,
-  "position_conclusion": "空仓/观望"
+  "position_conclusion": "空仓/观望",
+  "backtest_metrics": {
+    "total_return": 8.019072,
+    "annual_return": 0.293441,
+    "annual_volatility": 0.248051,
+    "sharpe": 1.199433,
+    "max_drawdown": -0.277805,
+    "calmar": 1.056285,
+    "turnover_ratio": 36.638509,
+    "holding_ratio": 0.336228,
+    "total_fees": 44094.584549,
+    "trade_count": 667.0,
+    "win_rate": 0.778409,
+    "profit_factor": 10.643555
+  },
+  "research_mechanical_gates_passed": true
 }

@@ -18,6 +18,15 @@ class SystemConfig:
     percentile_window: int = 756
     percentile_min_periods: int = 252
     minimum_ai_constituents: int = 3
+    initial_cash: float = 1_000_000.0
+    commission_rate: float = 0.00015
+    minimum_commission: float = 5.0
+    sell_stamp_duty_rate: float = 0.0005
+    slippage_bps: float = 8.0
+    lot_size: int = 100
+    limit_tolerance: float = 0.003
+    max_order_value_cny: float = 200_000.0
+    max_daily_turnover_ratio: float = 0.35
     transaction_cost_bps: float = 10.0
     max_target_position: float = 0.80
     stock_minimum_score: float = 55.0
