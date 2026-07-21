@@ -13,6 +13,7 @@ from .china_data import (
     download_china_ohlcv,
     file_sha256,
 )
+from .choice_data import load_choice_excel
 from .config import SystemConfig
 from .data import download_close_prices
 from .scoring import build_backtest, build_market_scores
@@ -127,11 +128,19 @@ def run_pipeline(root: Path, config: SystemConfig | None = None) -> dict[str, ob
     us_path = raw_dir / "us_adjusted_close.csv"
     us_close = download_close_prices(config, us_path)
     china_path = standardized_dir / "china_300308_qfq.csv"
-    china_bars, china_report = download_china_ohlcv(
-        config,
-        raw_path=raw_dir / "china_300308_latest_raw.csv",
-        standardized_path=china_path,
-    )
+    choice_path = root / "data" / "input" / "choice_300308.xlsx"
+    if choice_path.exists():
+        china_bars, china_report = load_choice_excel(
+            choice_path,
+            expected_symbol=config.target_symbol,
+            standardized_path=china_path,
+        )
+    else:
+        china_bars, china_report = download_china_ohlcv(
+            config,
+            raw_path=raw_dir / "china_300308_latest_raw.csv",
+            standardized_path=china_path,
+        )
     calendar = download_china_calendar(raw_dir / "china_trade_calendar.csv")
 
     us_scores = build_market_scores(us_close, config)

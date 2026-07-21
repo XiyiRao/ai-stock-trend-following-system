@@ -1,11 +1,11 @@
 {
-  "china_signal_date": "2026-07-20",
-  "us_source_date": "2026-07-17",
-  "ai_momentum_score": 36.15,
-  "semiconductor_score": 31.03,
-  "growth_score": 34.84,
-  "rates_score": 37.57,
-  "ai_score": 34.82,
+  "china_signal_date": "2026-07-21",
+  "us_source_date": "2026-07-20",
+  "ai_momentum_score": 26.15,
+  "semiconductor_score": 30.45,
+  "growth_score": 31.98,
+  "rates_score": 26.12,
+  "ai_score": 28.39,
   "market_regime": "防御",
   "regime_cap": 0.0,
   "target_position": 0.0

@@ -11,3 +11,5 @@ outputs/*.csv
 !outputs/.gitkeep
 build/
 *.egg-info/
+data/input/*.xlsx
+data/input/*.xls

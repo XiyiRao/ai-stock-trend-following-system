@@ -5,6 +5,7 @@ import pytest
 from ai_market_regime import data as data_module
 from ai_market_regime.alignment import align_us_scores_to_china_dates, build_alignment_audit
 from ai_market_regime.china_data import DataQualityError, standardize_china_ohlcv, validate_china_ohlcv
+from ai_market_regime.choice_data import standardize_choice_frame
 from ai_market_regime.config import SystemConfig
 from ai_market_regime.scoring import build_backtest, build_market_scores, position_from_score, regime_cap_from_score, rolling_percentile
 
@@ -99,3 +100,25 @@ def test_partial_batch_download_is_completed_by_chart_fallback(tmp_path, monkeyp
     result = data_module.download_close_prices(config, tmp_path / "close.csv")
     assert result.loc[dates[1], config.growth_ticker] == 101.0
     assert all(result[ticker].notna().all() for ticker in config.all_tickers)
+
+
+def test_choice_export_discards_footer_and_validates_symbol():
+    raw = pd.DataFrame(
+        {
+            "证券代码": [300308.0, 300308.0, "数据来源：妙想Choice"],
+            "交易时间": ["2026-07-20", "2026-07-21", None],
+            "开盘价": [100.0, 102.0, np.nan],
+            "最高价": [105.0, 110.0, np.nan],
+            "最低价": [99.0, 101.0, np.nan],
+            "收盘价": [104.0, 109.0, np.nan],
+            "成交量": [1000.0, 1200.0, np.nan],
+            "成交额": [102000.0, 128000.0, np.nan],
+        }
+    )
+    bars = standardize_choice_frame(raw, "300308")
+    assert bars.index.tolist() == [pd.Timestamp("2026-07-20"), pd.Timestamp("2026-07-21")]
+    assert bars.loc[pd.Timestamp("2026-07-21"), "close"] == 109.0
+
+    raw.loc[0, "证券代码"] = "000001"
+    with pytest.raises(DataQualityError, match="unexpected symbols"):
+        standardize_choice_frame(raw, "300308")

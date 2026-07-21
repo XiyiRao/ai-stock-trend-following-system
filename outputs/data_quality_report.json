@@ -1,30 +1,28 @@
 {
   "passed": true,
-  "generated_at": "2026-07-21T16:06:04",
+  "generated_at": "2026-07-21T16:36:46",
   "china": {
     "passed": true,
-    "rows": 2072,
+    "rows": 2073,
     "start_date": "2018-01-02",
-    "end_date": "2026-07-20",
+    "end_date": "2026-07-21",
     "issues": [],
-    "source": "sina",
-    "fallback_errors": [
-      "eastmoney: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
-    ]
+    "source": "choice_excel",
+    "source_file": "choice_300308.xlsx",
+    "source_sha256": "f1630afefdd124f271c88b1349780ce9433c1776ce0d083091526e31a67320e0",
+    "fallback_errors": []
   },
   "china_expected_latest_session": "2026-07-21",
-  "china_latest_is_current": false,
-  "china_open_session_lag": 1,
+  "china_latest_is_current": true,
+  "china_open_session_lag": 0,
   "us_rows": 2147,
   "us_start_date": "2018-01-02",
   "us_end_date": "2026-07-20",
   "valid_ai_members_latest": 5,
-  "aligned_rows": 2072,
+  "aligned_rows": 2073,
   "strict_alignment_audit_passed": true,
-  "standardized_china_sha256": "2c50cbe90ce9fc1732f090a261a49811f45b614c0ca953d30562d47caff4a62a",
+  "standardized_china_sha256": "1d4cf75e7b735d57e52fef7f7040e6e36836c65fffb50d03a4454036cbf3943d",
   "us_adjusted_close_sha256": "117476b1f43f135f6ebf99fb37707eefd8b0cd06729c7a8ccc9e6b4fd54bce6e",
-  "warnings": [
-    "China bars trail the calendar by one open session; provider may not have published final bars"
-  ],
+  "warnings": [],
   "issues": []
 }
