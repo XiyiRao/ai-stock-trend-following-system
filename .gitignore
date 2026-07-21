@@ -6,6 +6,7 @@ venv/
 .env
 work/
 data/raw/
+data/standardized/
 outputs/*.csv
 !outputs/.gitkeep
 build/

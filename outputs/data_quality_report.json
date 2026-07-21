@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "generated_at": "2026-07-21T16:06:04",
+  "china": {
+    "passed": true,
+    "rows": 2072,
+    "start_date": "2018-01-02",
+    "end_date": "2026-07-20",
+    "issues": [],
+    "source": "sina",
+    "fallback_errors": [
+      "eastmoney: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+    ]
+  },
+  "china_expected_latest_session": "2026-07-21",
+  "china_latest_is_current": false,
+  "china_open_session_lag": 1,
+  "us_rows": 2147,
+  "us_start_date": "2018-01-02",
+  "us_end_date": "2026-07-20",
+  "valid_ai_members_latest": 5,
+  "aligned_rows": 2072,
+  "strict_alignment_audit_passed": true,
+  "standardized_china_sha256": "2c50cbe90ce9fc1732f090a261a49811f45b614c0ca953d30562d47caff4a62a",
+  "us_adjusted_close_sha256": "117476b1f43f135f6ebf99fb37707eefd8b0cd06729c7a8ccc9e6b4fd54bce6e",
+  "warnings": [
+    "China bars trail the calendar by one open session; provider may not have published final bars"
+  ],
+  "issues": []
+}

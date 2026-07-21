@@ -7,7 +7,7 @@ from .config import SystemConfig
 
 
 def rolling_percentile(series: pd.Series, window: int, min_periods: int) -> pd.Series:
-    """Rank the latest value in its trailing window on a 0-100 scale."""
+    """Rank the latest value within its trailing history on a 0-100 scale."""
 
     def rank_latest(values: np.ndarray) -> float:
         current = values[-1]
@@ -21,107 +21,154 @@ def rolling_percentile(series: pd.Series, window: int, min_periods: int) -> pd.S
     return series.rolling(window=window, min_periods=min_periods).apply(rank_latest, raw=True)
 
 
-def position_from_score(score: pd.Series) -> pd.Series:
-    values = np.select([score > 70, score >= 50, score >= 30], [1.00, 0.70, 0.30], default=0.00)
-    result = pd.Series(values, index=score.index, dtype=float)
-    return result.where(score.notna())
+def regime_cap_from_score(score: pd.Series) -> pd.Series:
+    values = np.select(
+        [score >= 75, score >= 60, score >= 45],
+        [1.00, 0.70, 0.30],
+        default=0.00,
+    )
+    return pd.Series(values, index=score.index, dtype=float).where(score.notna())
+
+
+def position_from_score(score: pd.Series, maximum: float = 0.80) -> pd.Series:
+    return regime_cap_from_score(score).clip(upper=maximum)
 
 
 def regime_from_score(score: pd.Series) -> pd.Series:
     values = np.select(
-        [score > 70, score >= 50, score >= 30],
-        ["激进做多", "正常持仓", "降低仓位"],
-        default="空仓",
+        [score >= 75, score >= 60, score >= 45],
+        ["强风险偏好", "正常", "谨慎"],
+        default="防御",
     )
-    result = pd.Series(values, index=score.index, dtype="object")
-    return result.where(score.notna())
+    return pd.Series(values, index=score.index, dtype="object").where(score.notna())
+
+
+def _binary_score(condition: pd.Series, valid: pd.Series) -> pd.Series:
+    return (condition.astype(float) * 100.0).where(valid)
+
+
+def _trend_score(
+    price: pd.Series,
+    momentum20: pd.Series,
+    ma60: pd.Series,
+    ma120: pd.Series,
+    config: SystemConfig,
+) -> pd.Series:
+    momentum_pct = rolling_percentile(
+        momentum20, config.percentile_window, config.percentile_min_periods
+    )
+    above_ma60 = _binary_score(price > ma60, price.notna() & ma60.notna())
+    ma60_above_ma120 = _binary_score(ma60 > ma120, ma60.notna() & ma120.notna())
+    return 0.40 * momentum_pct + 0.30 * above_ma60 + 0.30 * ma60_above_ma120
 
 
 def build_market_scores(close: pd.DataFrame, config: SystemConfig) -> pd.DataFrame:
-    """Create component scores, composite AI_SCORE, regime, and target position."""
+    """Calculate the guide-aligned four-factor US market-regime score."""
 
     missing = sorted(set(config.all_tickers).difference(close.columns))
     if missing:
         raise ValueError(f"Missing columns: {', '.join(missing)}")
 
     close = close.sort_index().copy()
-    momentum = close.pct_change(config.momentum_days, fill_method=None)
+    return20 = close.pct_change(config.momentum_days, fill_method=None)
+    return60 = close.pct_change(config.long_momentum_days, fill_method=None)
     ma60 = close.rolling(config.trend_days, min_periods=config.trend_days).mean()
+    ma120 = close.rolling(config.long_trend_days, min_periods=config.long_trend_days).mean()
 
     ai_columns = list(config.ai_stocks)
-    ai_prices = close.loc[:, ai_columns]
-    ai_returns = momentum.loc[:, ai_columns]
-    available_count = ai_returns.notna().sum(axis=1)
-    ai_return20 = ai_returns.mean(axis=1, skipna=True).where(
-        available_count >= config.minimum_ai_constituents
+    available20 = return20[ai_columns].notna().sum(axis=1)
+    available60 = return60[ai_columns].notna().sum(axis=1)
+    ai_return20 = return20[ai_columns].mean(axis=1, skipna=True).where(
+        available20 >= config.minimum_ai_constituents
     )
-    ai_momentum_pct = rolling_percentile(
+    ai_return60 = return60[ai_columns].mean(axis=1, skipna=True).where(
+        available60 >= config.minimum_ai_constituents
+    )
+    ai_pct20 = rolling_percentile(
         ai_return20, config.percentile_window, config.percentile_min_periods
     )
-    ai_ma60 = ma60.loc[:, ai_columns]
-    ai_breadth = (ai_prices > ai_ma60).where(ai_prices.notna() & ai_ma60.notna()).mean(axis=1) * 100.0
-    ai_trend_score = 0.70 * ai_momentum_pct + 0.30 * ai_breadth
+    ai_pct60 = rolling_percentile(
+        ai_return60, config.percentile_window, config.percentile_min_periods
+    )
+    ai_momentum_score = 0.60 * ai_pct20 + 0.40 * ai_pct60
 
     sox = close[config.semiconductor_ticker]
-    sox_momentum_pct = rolling_percentile(
-        momentum[config.semiconductor_ticker], config.percentile_window, config.percentile_min_periods
+    semiconductor_score = _trend_score(
+        sox,
+        return20[config.semiconductor_ticker],
+        ma60[config.semiconductor_ticker],
+        ma120[config.semiconductor_ticker],
+        config,
     )
-    sox_above_ma60 = (sox > ma60[config.semiconductor_ticker]).astype(float) * 100.0
-    sox_ma60_rising = (
-        ma60[config.semiconductor_ticker] > ma60[config.semiconductor_ticker].shift(20)
-    ).astype(float) * 100.0
-    semiconductor_score = 0.50 * sox_momentum_pct + 0.30 * sox_above_ma60 + 0.20 * sox_ma60_rising
 
-    yield20_change = close[config.treasury_ticker].diff(config.momentum_days)
-    yield_change_pct = rolling_percentile(
-        yield20_change, config.percentile_window, config.percentile_min_periods
+    growth = close[config.growth_ticker]
+    growth_score = _trend_score(
+        growth,
+        return20[config.growth_ticker],
+        ma60[config.growth_ticker],
+        ma120[config.growth_ticker],
+        config,
     )
-    falling_yield_score = 100.0 - yield_change_pct
-    ndx = close[config.nasdaq_ticker]
-    ndx_above_ma60 = (ndx > ma60[config.nasdaq_ticker]).astype(float) * 100.0
-    ndx_momentum_pct = rolling_percentile(
-        momentum[config.nasdaq_ticker], config.percentile_window, config.percentile_min_periods
+
+    yield_change20 = close[config.treasury_ticker].diff(config.momentum_days)
+    rates_score = 100.0 - rolling_percentile(
+        yield_change20, config.percentile_window, config.percentile_min_periods
     )
-    liquidity_score = 0.50 * falling_yield_score + 0.30 * ndx_above_ma60 + 0.20 * ndx_momentum_pct
 
     weights = config.score_weights
     ai_score = (
-        weights["ai_trend"] * ai_trend_score
+        weights["ai_momentum"] * ai_momentum_score
         + weights["semiconductor"] * semiconductor_score
-        + weights["liquidity"] * liquidity_score
+        + weights["growth"] * growth_score
+        + weights["rates"] * rates_score
     ).clip(0, 100)
 
     result = pd.DataFrame(
         {
             "AI_Return20": ai_return20,
-            "AI_Breadth": ai_breadth,
-            "AI_Trend_Score": ai_trend_score,
+            "AI_Return60": ai_return60,
+            "AI_Momentum_Score": ai_momentum_score,
             "SOX_Close": sox,
             "SOX_MA60": ma60[config.semiconductor_ticker],
+            "SOX_MA120": ma120[config.semiconductor_ticker],
             "Semiconductor_Score": semiconductor_score,
+            "QQQ_Close": growth,
+            "QQQ_MA60": ma60[config.growth_ticker],
+            "QQQ_MA120": ma120[config.growth_ticker],
+            "Growth_Score": growth_score,
             "TNX_Close": close[config.treasury_ticker],
-            "TNX_Change20": yield20_change,
-            "NDX_Close": ndx,
-            "Liquidity_Score": liquidity_score,
+            "TNX_Change20": yield_change20,
+            "Rates_Score": rates_score,
             "AI_SCORE": ai_score,
         },
         index=close.index,
     )
     result["Market_Regime"] = regime_from_score(result["AI_SCORE"])
-    result["Target_Position"] = position_from_score(result["AI_SCORE"])
-    result.index.name = "Date"
+    result["Regime_Cap"] = regime_cap_from_score(result["AI_SCORE"])
+    result["Target_Position"] = position_from_score(
+        result["AI_SCORE"], maximum=config.max_target_position
+    )
+    result.index.name = "US_Date"
     return result
 
 
-def build_backtest(scores: pd.DataFrame, target_close: pd.Series, transaction_cost_bps: float = 10.0) -> pd.DataFrame:
-    """Backtest next-session execution, with simple one-way transaction costs."""
+def build_backtest(
+    scores: pd.DataFrame,
+    target_close: pd.Series,
+    transaction_cost_bps: float = 10.0,
+) -> pd.DataFrame:
+    """Research baseline: execute the prior China-session target on the next row."""
 
-    aligned = scores[["AI_SCORE", "Target_Position"]].join(target_close.rename("Target_Close"), how="left")
+    aligned = scores[["AI_SCORE", "Target_Position"]].join(
+        target_close.rename("Target_Close"), how="left"
+    )
     aligned["Target_Return"] = aligned["Target_Close"].pct_change(fill_method=None)
     aligned["Executed_Position"] = aligned["Target_Position"].shift(1).fillna(0.0)
     turnover = aligned["Executed_Position"].diff().abs().fillna(aligned["Executed_Position"].abs())
     cost = turnover * (transaction_cost_bps / 10_000.0)
-    aligned["Strategy_Return"] = aligned["Executed_Position"] * aligned["Target_Return"].fillna(0.0) - cost
+    aligned["Strategy_Return"] = (
+        aligned["Executed_Position"] * aligned["Target_Return"].fillna(0.0) - cost
+    )
     aligned["BuyHold_Equity"] = (1.0 + aligned["Target_Return"].fillna(0.0)).cumprod()
     aligned["Strategy_Equity"] = (1.0 + aligned["Strategy_Return"]).cumprod()
     return aligned

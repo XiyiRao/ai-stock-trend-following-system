@@ -1,9 +1,12 @@
 {
-  "date": "2026-07-20",
-  "ai_trend_score": 9.47,
-  "semiconductor_score": 20.58,
-  "liquidity_score": 18.63,
-  "ai_score": 14.63,
-  "market_regime": "空仓",
+  "china_signal_date": "2026-07-20",
+  "us_source_date": "2026-07-17",
+  "ai_momentum_score": 36.15,
+  "semiconductor_score": 31.03,
+  "growth_score": 34.84,
+  "rates_score": 37.57,
+  "ai_score": 34.82,
+  "market_regime": "防御",
+  "regime_cap": 0.0,
   "target_position": 0.0
 }

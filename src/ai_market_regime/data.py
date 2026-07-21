@@ -88,7 +88,10 @@ def download_close_prices(config: SystemConfig, cache_path: Path | None = None) 
         cached = cached.reindex(columns=list(config.all_tickers)).sort_index()
 
     download_start = config.start_date
-    if not cached.empty:
+    cache_is_complete = (not cached.empty) and all(
+        cached[ticker].notna().sum() > 0 for ticker in config.all_tickers
+    )
+    if cache_is_complete:
         download_start = (cached.index.max() - pd.Timedelta(days=90)).date().isoformat()
 
     end = (date.today() + timedelta(days=1)).isoformat()
@@ -133,9 +136,9 @@ def download_close_prices(config: SystemConfig, cache_path: Path | None = None) 
         close = fresh.combine_first(cached)
 
     close = close.sort_index()
-    # Carry exchange-specific holiday values first, then retain actual US sessions.
-    nasdaq_observed = close[config.nasdaq_ticker].notna()
-    close = close.ffill(limit=5).loc[nasdaq_observed]
+    # Retain actual QQQ sessions; do not fill missing US observations.
+    growth_observed = close[config.growth_ticker].notna()
+    close = close.loc[growth_observed]
     missing_entirely = [ticker for ticker in config.all_tickers if close[ticker].notna().sum() == 0]
     if missing_entirely:
         raise RuntimeError(f"No observations returned for: {', '.join(missing_entirely)}")
