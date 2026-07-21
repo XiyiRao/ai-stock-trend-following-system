@@ -17,17 +17,20 @@ from .choice_data import load_choice_excel
 from .config import SystemConfig
 from .data import download_close_prices
 from .scoring import build_backtest, build_market_scores
+from .stock_scoring import build_stock_scores, combine_market_and_stock_scores
 
 
 def _latest_payload(scores: pd.DataFrame) -> dict[str, object]:
-    valid = scores.dropna(subset=["AI_SCORE", "Target_Position", "US_Source_Date"])
+    required = ["AI_SCORE", "STOCK_SCORE", "Final_Target_Position", "US_Source_Date"]
+    valid = scores.dropna(subset=required)
     if valid.empty:
-        raise RuntimeError("Not enough history to calculate a market score.")
+        raise RuntimeError("Not enough history to calculate a combined market and stock score.")
     date_value = valid.index[-1]
     row = valid.iloc[-1]
     return {
         "china_signal_date": date_value.strftime("%Y-%m-%d"),
         "us_source_date": pd.Timestamp(row["US_Source_Date"]).strftime("%Y-%m-%d"),
+        "close": round(float(row["close"]), 2),
         "ai_momentum_score": round(float(row["AI_Momentum_Score"]), 2),
         "semiconductor_score": round(float(row["Semiconductor_Score"]), 2),
         "growth_score": round(float(row["Growth_Score"]), 2),
@@ -35,30 +38,72 @@ def _latest_payload(scores: pd.DataFrame) -> dict[str, object]:
         "ai_score": round(float(row["AI_SCORE"]), 2),
         "market_regime": str(row["Market_Regime"]),
         "regime_cap": round(float(row["Regime_Cap"]), 2),
-        "target_position": round(float(row["Target_Position"]), 2),
+        "market_position_cap": round(float(row["Market_Position_Cap"]), 2),
+        "trend_score": round(float(row["Trend_Score"]), 2),
+        "momentum_score": round(float(row["Momentum_Score"]), 2),
+        "volume_price_score": round(float(row["Volume_Price_Score"]), 2),
+        "breakout_score": round(float(row["Breakout_Score"]), 2),
+        "risk_quality_score": round(float(row["Risk_Quality_Score"]), 2),
+        "stock_score": round(float(row["STOCK_SCORE"]), 2),
+        "trend_eligible": bool(row["Trend_Eligible"]),
+        "ma20": round(float(row["MA20"]), 2),
+        "ma60": round(float(row["MA60"]), 2),
+        "ma120": round(float(row["MA120"]), 2),
+        "drawdown60": round(float(row["Drawdown60"]), 4),
+        "atr20": round(float(row["ATR20"]), 2),
+        "atr_stop_reference": round(float(row["ATR_Stop_Reference"]), 2),
+        "raw_target_position": round(float(row["Raw_Target_Position"]), 2),
+        "risk_rule": str(row["Risk_Rule"]),
+        "target_position": round(float(row["Final_Target_Position"]), 2),
+        "position_conclusion": str(row["Position_Conclusion"]),
     }
 
 
 def _plot_dashboard(scores: pd.DataFrame, backtest: pd.DataFrame, output_path: Path) -> None:
-    valid = scores.dropna(subset=["AI_SCORE"])
-    fig, axes = plt.subplots(3, 1, figsize=(13, 10), sharex=True)
-    axes[0].plot(backtest.index, backtest["Target_Close"], color="#2563eb", linewidth=1.2)
+    valid = scores.dropna(subset=["AI_SCORE", "STOCK_SCORE"])
+    fig, axes = plt.subplots(4, 1, figsize=(13, 13), sharex=True)
+    axes[0].plot(valid.index, valid["close"], color="#2563eb", linewidth=1.2, label="Close")
+    axes[0].plot(valid.index, valid["MA60"], color="#f59e0b", linewidth=1.0, label="MA60")
+    axes[0].plot(valid.index, valid["MA120"], color="#64748b", linewidth=1.0, label="MA120")
     axes[0].set_ylabel("300308")
-    axes[0].set_title("Guide-aligned AI Market Regime and Position Cap")
+    axes[0].set_title("AI Market Regime + 300308 Stock Confirmation")
+    axes[0].legend(loc="upper left")
     axes[0].grid(alpha=0.2)
+
     axes[1].plot(valid.index, valid["AI_SCORE"], color="#7c3aed", label="AI_SCORE")
-    axes[1].axhspan(75, 100, color="#16a34a", alpha=0.12)
-    axes[1].axhspan(60, 75, color="#84cc16", alpha=0.10)
-    axes[1].axhspan(45, 60, color="#f59e0b", alpha=0.10)
-    axes[1].axhspan(0, 45, color="#dc2626", alpha=0.10)
+    axes[1].axhline(45, color="#dc2626", alpha=0.45, linewidth=0.8)
+    axes[1].axhline(60, color="#f59e0b", alpha=0.45, linewidth=0.8)
+    axes[1].axhline(75, color="#16a34a", alpha=0.45, linewidth=0.8)
     axes[1].set_ylim(0, 100)
-    axes[1].set_ylabel("Score")
+    axes[1].set_ylabel("AI score")
     axes[1].legend(loc="upper left")
     axes[1].grid(alpha=0.2)
-    axes[2].step(valid.index, valid["Target_Position"] * 100, where="post", color="#ea580c")
-    axes[2].set_ylim(-5, 85)
-    axes[2].set_ylabel("Position cap %")
+
+    axes[2].plot(valid.index, valid["STOCK_SCORE"], color="#0891b2", label="STOCK_SCORE")
+    axes[2].axhline(55, color="#dc2626", alpha=0.5, linewidth=0.8, label="Entry threshold")
+    axes[2].set_ylim(0, 100)
+    axes[2].set_ylabel("Stock score")
+    axes[2].legend(loc="upper left")
     axes[2].grid(alpha=0.2)
+
+    axes[3].step(
+        valid.index,
+        valid["Market_Position_Cap"] * 100,
+        where="post",
+        color="#94a3b8",
+        label="Market cap",
+    )
+    axes[3].step(
+        valid.index,
+        valid["Final_Target_Position"] * 100,
+        where="post",
+        color="#ea580c",
+        label="Final target",
+    )
+    axes[3].set_ylim(-5, 85)
+    axes[3].set_ylabel("Position %")
+    axes[3].legend(loc="upper left")
+    axes[3].grid(alpha=0.2)
     fig.tight_layout()
     fig.savefig(output_path, dpi=160, bbox_inches="tight")
     plt.close(fig)
@@ -145,30 +190,33 @@ def run_pipeline(root: Path, config: SystemConfig | None = None) -> dict[str, ob
 
     us_scores = build_market_scores(us_close, config)
     aligned = align_us_scores_to_china_dates(us_scores, china_bars.index)
-    audit = build_alignment_audit(aligned, sample_size=10)
+    stock_scores = build_stock_scores(china_bars, config)
+    combined = combine_market_and_stock_scores(aligned, stock_scores, config)
+    audit = build_alignment_audit(combined, sample_size=10)
     report = _quality_report(
         us_close,
         china_bars,
         china_report,
         calendar,
-        aligned,
+        combined,
         audit,
         china_path,
         us_path,
         config,
     )
-    backtest = build_backtest(aligned, china_bars["close"], config.transaction_cost_bps)
+    backtest = build_backtest(combined, china_bars["close"], config.transaction_cost_bps)
 
     us_scores.to_csv(output_dir / "us_market_scores.csv", index_label="US_Date", encoding="utf-8-sig")
-    aligned.to_csv(output_dir / "market_state.csv", index_label="Date", encoding="utf-8-sig")
+    stock_scores.to_csv(output_dir / "stock_scores.csv", index_label="Date", encoding="utf-8-sig")
+    combined.to_csv(output_dir / "market_state.csv", index_label="Date", encoding="utf-8-sig")
     audit.to_csv(output_dir / "time_alignment_audit.csv", index=False, encoding="utf-8-sig")
     backtest.to_csv(output_dir / "backtest.csv", index_label="Date", encoding="utf-8-sig")
     (output_dir / "data_quality_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    payload = _latest_payload(aligned)
+    payload = _latest_payload(combined)
     (output_dir / "latest_signal.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    _plot_dashboard(aligned, backtest, output_dir / "market_dashboard.png")
+    _plot_dashboard(combined, backtest, output_dir / "market_dashboard.png")
     return payload

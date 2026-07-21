@@ -1,6 +1,7 @@
 {
   "china_signal_date": "2026-07-21",
   "us_source_date": "2026-07-20",
+  "close": 1136.55,
   "ai_momentum_score": 26.15,
   "semiconductor_score": 30.45,
   "growth_score": 31.98,
@@ -8,5 +9,22 @@
   "ai_score": 28.39,
   "market_regime": "防御",
   "regime_cap": 0.0,
-  "target_position": 0.0
+  "market_position_cap": 0.0,
+  "trend_score": 22.5,
+  "momentum_score": 7.37,
+  "volume_price_score": 8.62,
+  "breakout_score": 0.0,
+  "risk_quality_score": 2.69,
+  "stock_score": 41.18,
+  "trend_eligible": false,
+  "ma20": 1159.7,
+  "ma60": 1109.4,
+  "ma120": 861.7,
+  "drawdown60": -0.1778,
+  "atr20": 87.91,
+  "atr_stop_reference": 1118.59,
+  "raw_target_position": 0.0,
+  "risk_rule": "60日回撤减仓",
+  "target_position": 0.0,
+  "position_conclusion": "空仓/观望"
 }

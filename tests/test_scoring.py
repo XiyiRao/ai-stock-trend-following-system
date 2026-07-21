@@ -8,6 +8,7 @@ from ai_market_regime.china_data import DataQualityError, standardize_china_ohlc
 from ai_market_regime.choice_data import standardize_choice_frame
 from ai_market_regime.config import SystemConfig
 from ai_market_regime.scoring import build_backtest, build_market_scores, position_from_score, regime_cap_from_score, rolling_percentile
+from ai_market_regime.stock_scoring import build_stock_scores, combine_market_and_stock_scores
 
 
 def test_position_boundaries_and_single_stock_cap():
@@ -122,3 +123,79 @@ def test_choice_export_discards_footer_and_validates_symbol():
     raw.loc[0, "证券代码"] = "000001"
     with pytest.raises(DataQualityError, match="unexpected symbols"):
         standardize_choice_frame(raw, "300308")
+
+
+def _rising_china_bars(index: pd.DatetimeIndex) -> pd.DataFrame:
+    close = pd.Series(np.linspace(50.0, 150.0, len(index)), index=index)
+    return pd.DataFrame(
+        {
+            "open": close * 0.995,
+            "high": close * 1.02,
+            "low": close * 0.98,
+            "close": close,
+            "volume": np.linspace(1_000_000, 2_000_000, len(index)),
+            "amount": close * np.linspace(1_000_000, 2_000_000, len(index)),
+        },
+        index=index,
+    )
+
+
+def test_stock_score_has_five_bounded_components_and_trend_confirmation():
+    index = pd.bdate_range("2022-01-03", periods=360)
+    config = SystemConfig(percentile_window=120, percentile_min_periods=60)
+    result = build_stock_scores(_rising_china_bars(index), config)
+    latest = result.iloc[-1]
+    components = [
+        latest["Trend_Score"],
+        latest["Momentum_Score"],
+        latest["Volume_Price_Score"],
+        latest["Breakout_Score"],
+        latest["Risk_Quality_Score"],
+    ]
+    assert np.isclose(latest["STOCK_SCORE"], sum(components))
+    assert 0 <= latest["STOCK_SCORE"] <= 100
+    assert 0 <= latest["Trend_Score"] <= 30
+    assert 0 <= latest["Momentum_Score"] <= 25
+    assert 0 <= latest["Volume_Price_Score"] <= 15
+    assert 0 <= latest["Breakout_Score"] <= 15
+    assert 0 <= latest["Risk_Quality_Score"] <= 15
+    assert bool(latest["Trend_Eligible"])
+
+
+def test_stock_confirmation_and_drawdown_never_exceed_market_cap():
+    index = pd.bdate_range("2024-01-02", periods=3)
+    config = SystemConfig(stock_minimum_score=55, rebalance_threshold=0.10)
+    market = pd.DataFrame({"Target_Position": [0.8, 0.8, 0.8]}, index=index)
+    stock = pd.DataFrame(
+        {
+            "STOCK_SCORE": [80.0, 80.0, 80.0],
+            "Trend_Eligible": [True, True, True],
+            "Drawdown60": [-0.05, -0.16, -0.23],
+            "close": [100.0, 95.0, 90.0],
+            "MA120": [80.0, 80.0, 80.0],
+        },
+        index=index,
+    )
+    result = combine_market_and_stock_scores(market, stock, config)
+    assert result["Risk_Adjusted_Position"].tolist() == [0.8, 0.4, 0.0]
+    assert (result["Final_Target_Position"] <= result["Market_Position_Cap"]).all()
+    assert result.iloc[-1]["Risk_Rule"] == "60日回撤清仓"
+
+
+def test_failed_stock_trend_forces_zero_position_even_in_strong_market():
+    index = pd.bdate_range("2024-01-02", periods=2)
+    config = SystemConfig()
+    market = pd.DataFrame({"Target_Position": [0.8, 0.8]}, index=index)
+    stock = pd.DataFrame(
+        {
+            "STOCK_SCORE": [40.0, 50.0],
+            "Trend_Eligible": [False, False],
+            "Drawdown60": [-0.01, -0.02],
+            "close": [100.0, 101.0],
+            "MA120": [90.0, 91.0],
+        },
+        index=index,
+    )
+    result = combine_market_and_stock_scores(market, stock, config)
+    assert result["Final_Target_Position"].eq(0.0).all()
+    assert result["Position_Conclusion"].eq("空仓/观望").all()

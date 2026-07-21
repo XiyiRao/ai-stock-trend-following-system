@@ -20,6 +20,15 @@ class SystemConfig:
     minimum_ai_constituents: int = 3
     transaction_cost_bps: float = 10.0
     max_target_position: float = 0.80
+    stock_minimum_score: float = 55.0
+    breakout_days: int = 120
+    atr_days: int = 20
+    peak_days: int = 60
+    drawdown_reduce_at: float = 0.15
+    drawdown_exit_at: float = 0.22
+    drawdown_reduced_multiplier: float = 0.50
+    atr_stop_multiple: float = 3.0
+    rebalance_threshold: float = 0.10
     score_weights: dict[str, float] = field(
         default_factory=lambda: {
             "ai_momentum": 0.40,

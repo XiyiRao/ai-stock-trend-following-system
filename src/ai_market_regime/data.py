@@ -7,7 +7,19 @@ import warnings
 
 import pandas as pd
 import requests
-import yfinance as yf
+
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+
+    class _MissingYFinance:
+        @staticmethod
+        def download(*args, **kwargs) -> pd.DataFrame:
+            return pd.DataFrame()
+
+    yf = _MissingYFinance()
 
 from .config import SystemConfig
 
@@ -93,6 +105,14 @@ def download_close_prices(config: SystemConfig, cache_path: Path | None = None) 
     )
     if cache_is_complete:
         download_start = (cached.index.max() - pd.Timedelta(days=90)).date().isoformat()
+    if cache_is_complete and not YFINANCE_AVAILABLE:
+        warnings.warn(
+            "yfinance is not installed; continuing with the local cache.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        growth_observed = cached[config.growth_ticker].notna()
+        return cached.loc[growth_observed]
 
     end = (date.today() + timedelta(days=1)).isoformat()
     downloaded = pd.DataFrame()

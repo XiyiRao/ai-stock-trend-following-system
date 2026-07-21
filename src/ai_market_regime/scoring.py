@@ -159,9 +159,14 @@ def build_backtest(
 ) -> pd.DataFrame:
     """Research baseline: execute the prior China-session target on the next row."""
 
-    aligned = scores[["AI_SCORE", "Target_Position"]].join(
-        target_close.rename("Target_Close"), how="left"
+    position_column = (
+        "Final_Target_Position"
+        if "Final_Target_Position" in scores.columns
+        else "Target_Position"
     )
+    aligned = scores[["AI_SCORE", position_column]].rename(
+        columns={position_column: "Target_Position"}
+    ).join(target_close.rename("Target_Close"), how="left")
     aligned["Target_Return"] = aligned["Target_Close"].pct_change(fill_method=None)
     aligned["Executed_Position"] = aligned["Target_Position"].shift(1).fillna(0.0)
     turnover = aligned["Executed_Position"].diff().abs().fillna(aligned["Executed_Position"].abs())
