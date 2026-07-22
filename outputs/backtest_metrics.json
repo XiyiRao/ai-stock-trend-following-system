@@ -1,14 +1,14 @@
 {
-  "total_return": 5.078775017680206,
-  "annual_return": 0.2350952591200164,
-  "annual_volatility": 0.19363435689445227,
-  "sharpe": 1.228265298779085,
+  "total_return": 4.985059125400206,
+  "annual_return": 0.23276962304371063,
+  "annual_volatility": 0.1936716127565703,
+  "sharpe": 1.2177647661907152,
   "max_drawdown": -0.2459147276408622,
-  "calmar": 0.9560031697790515,
-  "turnover_ratio": 41.9975870705063,
-  "holding_ratio": 0.4409068982151471,
-  "total_fees": 41150.6455198,
-  "trade_count": 751.0,
-  "win_rate": 0.7333333333333333,
-  "profit_factor": 7.343761028425223
+  "calmar": 0.9465460864289963,
+  "turnover_ratio": 42.01225847330797,
+  "holding_ratio": 0.4411764705882353,
+  "total_fees": 41222.737799799994,
+  "trade_count": 752.0,
+  "win_rate": 0.7339901477832512,
+  "profit_factor": 7.370232667347282
 }
