@@ -124,4 +124,17 @@ $env:PYTHONPATH="src"
 .venv\Scripts\python.exe -m pytest -q
 ```
 
-目前共19项测试，覆盖评分边界、未来函数、Choice字段、下一日执行、一字涨停、ATR止损、费用、研究划分和模拟盘幂等性。
+目前共21项测试，覆盖评分边界、未来函数、Choice字段、下一日执行、一字涨停、ATR止损、费用、研究划分和模拟盘幂等性。
+
+## 两年历史模拟盘回放
+
+使用已导入的Choice历史Excel运行最近两个完整日历年的模拟盘：
+
+```powershell
+$env:PYTHONPATH="src"
+.venv\Scripts\python.exe run_replay.py
+```
+
+回放区间从最新数据日期向前推两个日历年，并额外读取区间开始前一个交易日作为首日信号。系统严格按照“当日收盘生成信号、下一A股交易日开盘执行”，并复用T+1、整手、涨跌停、滑点、费用和单笔限额规则。
+
+结果独立保存在 `outputs/paper_replay_2y.json`、`paper_replay_2y_daily.csv` 和 `paper_replay_2y_trades.csv`，不会覆盖按真实日期运行的模拟盘账户。

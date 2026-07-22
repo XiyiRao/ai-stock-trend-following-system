@@ -8,6 +8,8 @@ work/
 data/raw/
 data/standardized/
 outputs/*.csv
+!outputs/paper_replay_2y_daily.csv
+!outputs/paper_replay_2y_trades.csv
 !outputs/.gitkeep
 build/
 *.egg-info/

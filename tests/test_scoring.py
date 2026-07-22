@@ -6,6 +6,7 @@ from ai_market_regime import data as data_module
 from ai_market_regime.backtest import performance_metrics, run_event_backtest, trade_fees
 from ai_market_regime.paper import run_paper_daily
 from ai_market_regime.research import chronological_splits, positions_for_config
+from ai_market_regime.replay import run_historical_paper_replay
 from ai_market_regime.alignment import align_us_scores_to_china_dates, build_alignment_audit
 from ai_market_regime.china_data import DataQualityError, standardize_china_ohlcv, validate_china_ohlcv
 from ai_market_regime.choice_data import standardize_choice_frame
@@ -352,3 +353,53 @@ def test_paper_kill_switch_disables_new_plan(tmp_path):
     assert summary["next_order_plan"]["status"] == "disabled"
     assert summary["reconciliation"]["kill_switch"] is True
     assert summary["account"]["shares"] == 0
+
+
+
+def test_historical_paper_replay_uses_prior_signal_for_two_year_window():
+    index = pd.bdate_range("2023-12-29", "2026-01-02")
+    frame = pd.DataFrame(
+        {
+            "open": np.linspace(100.0, 160.0, len(index)),
+            "high": np.linspace(102.0, 162.0, len(index)),
+            "low": np.linspace(98.0, 158.0, len(index)),
+            "close": np.linspace(101.0, 161.0, len(index)),
+            "volume": 1_000_000,
+            "Final_Target_Position": 0.3,
+            "ATR20": 5.0,
+            "US_Source_Date": index - pd.Timedelta(days=1),
+        },
+        index=index,
+    )
+    daily, trades, report = run_historical_paper_replay(
+        frame, _backtest_config(), years=2
+    )
+    boundary = index[-1] - pd.DateOffset(years=2)
+    expected_start = index[index >= boundary][0]
+    assert daily.index[0] == expected_start
+    assert daily.index[-1] == index[-1]
+    assert report["requested_calendar_years"] == 2
+    assert report["completed_execution_sessions"] == len(index[index >= boundary])
+    assert report["strict_us_cn_date_alignment"] is True
+    assert not trades.empty
+    assert pd.Timestamp(trades.iloc[0]["signal_date"]) < daily.index[0]
+    assert pd.Timestamp(trades.iloc[0]["execution_date"]) == daily.index[0]
+
+
+def test_historical_paper_replay_rejects_same_day_us_data():
+    index = pd.bdate_range("2023-12-29", "2026-01-02")
+    frame = pd.DataFrame(
+        {
+            "open": 100.0,
+            "high": 102.0,
+            "low": 98.0,
+            "close": 101.0,
+            "volume": 1_000_000,
+            "Final_Target_Position": 0.3,
+            "ATR20": 5.0,
+            "US_Source_Date": index,
+        },
+        index=index,
+    )
+    with pytest.raises(ValueError, match="strictly earlier"):
+        run_historical_paper_replay(frame, _backtest_config(), years=2)
