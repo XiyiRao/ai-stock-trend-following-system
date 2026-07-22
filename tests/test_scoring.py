@@ -15,9 +15,10 @@ from ai_market_regime.stock_scoring import build_stock_scores, combine_market_an
 
 
 def test_position_boundaries_and_single_stock_cap():
-    scores = pd.Series([75.0, 74.9, 60.0, 59.9, 45.0, 44.9, np.nan])
-    pd.testing.assert_series_equal(regime_cap_from_score(scores), pd.Series([1.0, 0.7, 0.7, 0.3, 0.3, 0.0, np.nan]))
-    pd.testing.assert_series_equal(position_from_score(scores, maximum=0.8), pd.Series([0.8, 0.7, 0.7, 0.3, 0.3, 0.0, np.nan]))
+    scores = pd.Series([75.0, 74.9, 60.0, 59.9, 45.0, 44.9, 30.0, 29.9, np.nan])
+    expected = pd.Series([0.65, 0.50, 0.50, 0.25, 0.25, 0.10, 0.10, 0.05, np.nan])
+    pd.testing.assert_series_equal(regime_cap_from_score(scores), expected)
+    pd.testing.assert_series_equal(position_from_score(scores), expected)
 
 
 def test_rolling_percentile_uses_trailing_values():
@@ -42,7 +43,7 @@ def test_scores_are_bounded_and_recent_listing_is_supported():
     valid = scores["AI_SCORE"].dropna()
     assert not valid.empty
     assert valid.between(0, 100).all()
-    assert scores["Target_Position"].dropna().between(0, 0.8).all()
+    assert scores["Target_Position"].dropna().between(0.05, 0.65).all()
     assert pd.notna(scores.loc[index[60], "AI_Return20"])
 
 
@@ -167,7 +168,11 @@ def test_stock_score_has_five_bounded_components_and_trend_confirmation():
 
 def test_stock_confirmation_and_drawdown_never_exceed_market_cap():
     index = pd.bdate_range("2024-01-02", periods=3)
-    config = SystemConfig(stock_minimum_score=55, rebalance_threshold=0.10)
+    config = SystemConfig(
+        stock_minimum_score=55,
+        rebalance_threshold=0.10,
+        max_target_position=0.80,
+    )
     market = pd.DataFrame({"Target_Position": [0.8, 0.8, 0.8]}, index=index)
     stock = pd.DataFrame(
         {
@@ -185,7 +190,7 @@ def test_stock_confirmation_and_drawdown_never_exceed_market_cap():
     assert result.iloc[-1]["Risk_Rule"] == "60日回撤清仓"
 
 
-def test_failed_stock_trend_forces_zero_position_even_in_strong_market():
+def test_failed_stock_trend_keeps_observation_position_until_hard_exit():
     index = pd.bdate_range("2024-01-02", periods=2)
     config = SystemConfig()
     market = pd.DataFrame({"Target_Position": [0.8, 0.8]}, index=index)
@@ -200,8 +205,8 @@ def test_failed_stock_trend_forces_zero_position_even_in_strong_market():
         index=index,
     )
     result = combine_market_and_stock_scores(market, stock, config)
-    assert result["Final_Target_Position"].eq(0.0).all()
-    assert result["Position_Conclusion"].eq("空仓/观望").all()
+    assert result["Final_Target_Position"].eq(0.05).all()
+    assert result["Position_Conclusion"].eq("最低观察仓").all()
 
 
 def _backtest_config(**overrides):

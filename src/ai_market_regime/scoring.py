@@ -23,22 +23,22 @@ def rolling_percentile(series: pd.Series, window: int, min_periods: int) -> pd.S
 
 def regime_cap_from_score(score: pd.Series) -> pd.Series:
     values = np.select(
-        [score >= 75, score >= 60, score >= 45],
-        [1.00, 0.70, 0.30],
-        default=0.00,
+        [score >= 75, score >= 60, score >= 45, score >= 30],
+        [0.65, 0.50, 0.25, 0.10],
+        default=0.05,
     )
     return pd.Series(values, index=score.index, dtype=float).where(score.notna())
 
 
-def position_from_score(score: pd.Series, maximum: float = 0.80) -> pd.Series:
+def position_from_score(score: pd.Series, maximum: float = 0.65) -> pd.Series:
     return regime_cap_from_score(score).clip(upper=maximum)
 
 
 def regime_from_score(score: pd.Series) -> pd.Series:
     values = np.select(
-        [score >= 75, score >= 60, score >= 45],
-        ["强风险偏好", "正常", "谨慎"],
-        default="防御",
+        [score >= 75, score >= 60, score >= 45, score >= 30],
+        ["积极持有", "正常持有", "防御持有", "谨慎观察"],
+        default="最低观察仓",
     )
     return pd.Series(values, index=score.index, dtype="object").where(score.notna())
 

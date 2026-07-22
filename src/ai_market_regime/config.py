@@ -28,7 +28,8 @@ class SystemConfig:
     max_order_value_cny: float = 200_000.0
     max_daily_turnover_ratio: float = 0.35
     transaction_cost_bps: float = 10.0
-    max_target_position: float = 0.80
+    max_target_position: float = 0.65
+    minimum_observation_position: float = 0.05
     stock_minimum_score: float = 55.0
     breakout_days: int = 120
     atr_days: int = 20

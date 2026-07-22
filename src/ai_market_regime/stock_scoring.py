@@ -109,15 +109,25 @@ def _filter_rebalances(targets: pd.Series, threshold: float) -> pd.Series:
     previous = 0.0
     for target in targets.fillna(0.0):
         target_value = float(target)
-        if abs(target_value - previous) >= threshold:
+        if (
+            (previous <= 0.0 < target_value)
+            or (target_value <= 0.0 < previous)
+            or abs(target_value - previous) >= threshold
+        ):
             previous = target_value
         filtered.append(previous)
     return pd.Series(filtered, index=targets.index, dtype=float)
 
 
-def _position_conclusion(position: float, raw_position: float) -> str:
+def _position_conclusion(
+    position: float,
+    raw_position: float,
+    minimum_observation_position: float,
+) -> str:
     if position <= 0:
-        return "空仓/观望"
+        return "极端风险清仓"
+    if position <= minimum_observation_position:
+        return "最低观察仓"
     if position < raw_position:
         return "风险减仓"
     if position <= 0.30:
@@ -136,8 +146,11 @@ def combine_market_and_stock_scores(
 
     frame = market_scores.join(stock_scores, how="left")
     frame["Market_Position_Cap"] = frame["Target_Position"]
+    observation_floor = frame["Market_Position_Cap"].clip(
+        upper=config.minimum_observation_position
+    ).fillna(0.0)
     frame["Raw_Target_Position"] = frame["Market_Position_Cap"].where(
-        frame["Trend_Eligible"].fillna(False), 0.0
+        frame["Trend_Eligible"].fillna(False), observation_floor
     )
     frame["Risk_Adjusted_Position"] = frame["Raw_Target_Position"].fillna(0.0)
 
@@ -145,6 +158,9 @@ def combine_market_and_stock_scores(
     exit_mask = frame["Drawdown60"] <= -config.drawdown_exit_at
     long_trend_exit = frame["close"] < frame["MA120"]
     frame.loc[reduce_mask, "Risk_Adjusted_Position"] *= config.drawdown_reduced_multiplier
+    frame["Risk_Adjusted_Position"] = frame["Risk_Adjusted_Position"].clip(
+        lower=observation_floor
+    )
     frame.loc[exit_mask | long_trend_exit, "Risk_Adjusted_Position"] = 0.0
     frame["Risk_Adjusted_Position"] = frame["Risk_Adjusted_Position"].clip(
         0.0, config.max_target_position
@@ -159,7 +175,11 @@ def combine_market_and_stock_scores(
     risk_rule.loc[exit_mask] = "60日回撤清仓"
     frame["Risk_Rule"] = risk_rule
     frame["Position_Conclusion"] = [
-        _position_conclusion(float(position), float(raw))
+        _position_conclusion(
+            float(position),
+            float(raw),
+            config.minimum_observation_position,
+        )
         for position, raw in zip(
             frame["Final_Target_Position"], frame["Raw_Target_Position"].fillna(0.0)
         )

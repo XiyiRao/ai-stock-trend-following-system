@@ -16,7 +16,11 @@ def _filter_targets(targets: pd.Series, threshold: float) -> pd.Series:
     previous = 0.0
     for value in targets.fillna(0.0):
         target = float(value)
-        if abs(target - previous) >= threshold:
+        if (
+            (previous <= 0.0 < target)
+            or (target <= 0.0 < previous)
+            or abs(target - previous) >= threshold
+        ):
             previous = target
         result.append(previous)
     return pd.Series(result, index=targets.index, dtype=float)
@@ -31,8 +35,14 @@ def positions_for_config(frame: pd.DataFrame, config: SystemConfig) -> pd.DataFr
         & (result["close"] > result["MA60"])
         & (result["MA20"] > result["MA60"])
     )
-    target = result["Market_Position_Cap"].where(eligible, 0.0).fillna(0.0)
+    observation_floor = result["Market_Position_Cap"].clip(
+        upper=config.minimum_observation_position
+    ).fillna(0.0)
+    target = result["Market_Position_Cap"].where(
+        eligible, observation_floor
+    ).fillna(0.0)
     target.loc[result["Drawdown60"] <= -config.drawdown_reduce_at] *= config.drawdown_reduced_multiplier
+    target = target.clip(lower=observation_floor)
     target.loc[
         (result["Drawdown60"] <= -config.drawdown_exit_at)
         | (result["close"] < result["MA120"])
